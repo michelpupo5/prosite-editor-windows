@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ProSite Editor for Windows",
-  "main": "src/main.js",
+"main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win nsis",
@@ -22,10 +22,13 @@
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "src/**/*",
-      "package.json",
-      "node_modules/**/*"
+   "files": [
+  "*.js",
+  "*.html",
+  "*.css",
+  "package.json",
+  "node_modules/**/*"
+],
     ],
     "win": {
       "target": [
