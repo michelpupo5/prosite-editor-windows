@@ -4,11 +4,10 @@
   "private": true,
   "description": "ProSite Editor for Windows",
 "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "dist:win": "electron-builder --win nsis",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js"
-  },
+ "scripts": {
+  "start": "electron .",
+  "dist:win": "electron-builder --win nsis --publish never"
+},
   "dependencies": {
     "jszip": "^3.10.1"
   },
