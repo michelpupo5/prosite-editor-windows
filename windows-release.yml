@@ -2,9 +2,7 @@ name: Windows installer
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
-permissions:
-  contents: write
+    branches: [main]
 jobs:
   build:
     runs-on: windows-latest
@@ -13,17 +11,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-      - run: npm ci
+      - run: npm install
+      - name: Prepare bundled WordPress runtime
+        shell: pwsh
+        run: ./scripts/prepare-runtime.ps1
       - run: npm run check
       - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
           name: ProSite-Editor-Windows-Installer
           path: dist/*.exe
-      - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: gh release create "${GITHUB_REF_NAME}" dist/*.exe --generate-notes
+          if-no-files-found: error

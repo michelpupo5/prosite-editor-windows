@@ -1,10 +1,11 @@
 const {app,BrowserWindow,ipcMain,dialog,shell}=require('electron');
 const path=require('path'),fs=require('fs/promises'),JSZip=require('jszip');
+const runtime=require('./runtime');
 let win;const projects=()=>path.join(app.getPath('userData'),'projects');
 function safe(s){return String(s||'project').replace(/[^a-z0-9_-]/gi,'-').replace(/-+/g,'-').slice(0,65)}
 async function list(){await fs.mkdir(projects(),{recursive:true});return (await fs.readdir(projects())).filter(x=>x.endsWith('.json')).map(x=>x.slice(0,-5))}
 app.whenReady().then(()=>{win=new BrowserWindow({width:1500,height:940,minWidth:980,minHeight:620,backgroundColor:'#0b1424',webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});win.loadFile(path.join(__dirname,'index.html'));});
-app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
+app.on('window-all-closed',()=>{runtime.stopAll();if(process.platform!=='darwin')app.quit()});
 ipcMain.handle('project:list',async()=>{const ids=await list();return Promise.all(ids.map(async id=>{try{let p=JSON.parse(await fs.readFile(path.join(projects(),id+'.json')));return {id,title:p.title,updated:p.updated,files:p.files?.length||0}}catch{return null}})).then(a=>a.filter(Boolean))});
 ipcMain.handle('project:import',async()=>{const result=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'WordPress ZIP',extensions:['zip']}]});if(result.canceled)return null;const bytes=await fs.readFile(result.filePaths[0]);if(bytes.length>40*1024*1024)throw Error('ZIP exceeds 40 MB import limit');const zip=await JSZip.loadAsync(bytes,{checkCRC32:true});const entries=Object.values(zip.files).filter(f=>!f.dir);if(entries.length>2500)throw Error('Too many files');let files=[],shortcodes=[];for(const f of entries){if(f.name.includes('..')||f.name.startsWith('/')||f.name.includes('\\'))throw Error('Unsafe ZIP path');const ext=path.extname(f.name).toLowerCase();if(['.html','.htm','.css','.js','.php','.png','.jpg','.jpeg','.webp','.svg'].includes(ext))files.push(f.name);if(ext==='.php'&&f._data.uncompressedSize<1500000){const code=await f.async('string');for(const m of code.matchAll(/add_shortcode\s*\(\s*['"]([^'"]+)['"]/g))shortcodes.push(m[1]);}}
 const id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);const title=safe(path.basename(result.filePaths[0],'.zip'));const html=files.find(x=>/\.html?$/i.test(x));const htmlText=html?await zip.file(html).async('string'):null;const project={id,title,updated:new Date().toISOString(),originalZip:result.filePaths[0],files,shortcodes:[...new Set(shortcodes)],htmlFile:html||null,html:htmlText,css:'',edits:[],notes:'',previewMode:html?'html':'shortcode'};await fs.mkdir(projects(),{recursive:true});await fs.writeFile(path.join(projects(),id+'.json'),JSON.stringify(project));await fs.copyFile(result.filePaths[0],path.join(projects(),id+'.zip'));return project;});
@@ -16,3 +17,12 @@ ipcMain.handle('project:export',async(_,id,html,css)=>{const base=path.join(proj
 const prefix=p.files[0]?.split('/')[0]||'prosite-plugin';zip.file(prefix+'/prosite-editor-overrides.css',css)}
 const save=await dialog.showSaveDialog(win,{defaultPath:p.title+'-edited.zip',filters:[{name:'ZIP archive',extensions:['zip']}]});if(save.canceled)return null;await fs.writeFile(save.filePath,await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));return save.filePath});
 ipcMain.handle('external:open',async(_,url)=>{if(/^https:\/\//.test(url))await shell.openExternal(url)});
+
+// Managed local WordPress preview: bundled PHP + SQLite, no Docker required.
+ipcMain.handle('runtime:status',async()=>runtime.status());
+ipcMain.handle('runtime:start',async(_,id)=>{
+ const base=path.join(projects(),safe(id));
+ const project=JSON.parse(await fs.readFile(base+'.json'));
+ return runtime.start(project,base+'.zip');
+});
+ipcMain.handle('runtime:stop',async(_,id)=>runtime.stop(safe(id)));
