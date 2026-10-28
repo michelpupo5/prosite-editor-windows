@@ -28,7 +28,6 @@
   "*.css",
   "package.json",
   "node_modules/**/*"
-],
     ],
     "win": {
       "target": [
